@@ -1,4 +1,5 @@
-// Stage 1: datasource only. Models are added in Stage 2.
+// Stage 2: full data model (SPEC section 6).
+// Money values are Int cents (USD) or Int cents (ZiG). No floats or decimals.
 // https://pris.ly/d/prisma-schema
 
 generator client {
@@ -8,4 +9,221 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ---------- Enums ----------
+
+enum UserRole {
+  ADMIN
+  ORGANIZER
+  STAFF
+}
+
+enum OrganizerStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  ENDED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  REFUNDED
+}
+
+enum TicketStatus {
+  VALID
+  USED
+  CANCELLED
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum Currency {
+  USD
+  ZIG
+}
+
+// ---------- Models ----------
+
+model Organizer {
+  id            String            @id @default(cuid())
+  name          String
+  contactEmail  String?
+  contactPhone  String?
+  payoutDetails String?           @db.Text
+  status        OrganizerStatus   @default(PENDING)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  users   User[]
+  events  Event[]
+  payouts Payout[]
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  role         UserRole   @default(ORGANIZER)
+  organizerId  String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  organizer Organizer? @relation(fields: [organizerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([role])
+  @@index([organizerId])
+}
+
+model Event {
+  id          String      @id @default(cuid())
+  organizerId String
+  title       String
+  description String?     @db.Text
+  venue       String
+  city        String
+  startsAt    DateTime
+  endsAt      DateTime
+  imageUrl    String?
+  status      EventStatus @default(DRAFT)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  organizer   Organizer    @relation(fields: [organizerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  ticketTypes TicketType[]
+
+  @@index([status])
+  @@index([startsAt])
+  @@index([organizerId, status])
+}
+
+model TicketType {
+  id               String   @id @default(cuid())
+  eventId          String
+  name             String
+  priceAmount      Int      // integer cents: USD = 100ths, ZiG = 100ths
+  currency         Currency
+  quantityTotal    Int
+  quantitySold     Int      @default(0)
+  quantityReserved Int      @default(0)
+  saleStartsAt     DateTime?
+  saleEndsAt       DateTime?
+  maxPerOrder      Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  orderItems OrderItem[]
+  tickets    Ticket[]
+
+  // A PostgreSQL CHECK constraint is appended in the migration SQL to enforce:
+  //   quantitySold >= 0 AND quantityReserved >= 0
+  //   AND quantitySold + quantityReserved <= quantityTotal
+  // Prisma does not support CHECK constraints in schema syntax; the rule is
+  // applied as raw SQL inside the init migration.
+
+  @@index([eventId])
+  @@index([eventId, currency])
+}
+
+model Order {
+  id               String      @id @default(cuid())
+  buyerName        String
+  buyerPhone       String
+  buyerEmail       String?
+  totalAmount      Int         // integer cents
+  currency         Currency
+  status           OrderStatus @default(PENDING)
+  paymentProvider  String?
+  paymentReference String?     @unique
+  expiresAt        DateTime
+  createdAt        DateTime    @default(now())
+
+  items         OrderItem[]
+  tickets       Ticket[]
+  paymentEvents PaymentEvent[]
+
+  @@index([status])
+  @@index([expiresAt])
+  @@index([buyerPhone])
+  @@index([status, expiresAt])
+  @@index([paymentReference])
+}
+
+model OrderItem {
+  id           String @id @default(cuid())
+  orderId      String
+  ticketTypeId String
+  quantity     Int
+  unitPrice    Int    // integer cents
+
+  order      Order      @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  ticketType TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([orderId])
+  @@index([ticketTypeId])
+}
+
+model Ticket {
+  id           String       @id @default(cuid())
+  orderId      String
+  ticketTypeId String
+  code         String       @unique // random unguessable, >=128 bits (NOT sequential)
+  status       TicketStatus @default(VALID)
+  usedAt       DateTime?
+  scannedBy    String?
+
+  order      Order      @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  ticketType TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([orderId])
+  @@index([ticketTypeId])
+  // Note: @@index([code]) removed — @unique already creates a btree index
+}
+
+model PaymentEvent {
+  id              String   @id @default(cuid())
+  orderId         String
+  provider        String
+  providerEventId String
+  rawPayload      Json
+  receivedAt      DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  // Idempotency: the same provider event cannot be recorded twice.
+  @@unique([provider, providerEventId])
+  @@index([orderId])
+}
+
+model Payout {
+  id          String       @id @default(cuid())
+  organizerId String
+  amount      Int          // integer cents
+  currency    Currency
+  status      PayoutStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  organizer Organizer @relation(fields: [organizerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([organizerId])
+  @@index([status])
+  @@index([organizerId, status])
 }

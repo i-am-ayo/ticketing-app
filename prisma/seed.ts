@@ -8,6 +8,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import {
   Currency,
+  EventCategory,
   EventStatus,
   OrganizerStatus,
   UserRole,
@@ -122,6 +123,7 @@ async function runSeed() {
       startsAt: Date;
       endsAt: Date;
       imageUrl: string | null;
+      category: EventCategory;
       status: EventStatus;
       ticketTypes: Array<{
         id: string;
@@ -148,6 +150,7 @@ async function runSeed() {
         startsAt: new Date("2026-11-21T10:00:00Z"),
         endsAt: new Date("2026-11-21T22:00:00Z"),
         imageUrl: null,
+        category: EventCategory.CONCERT,
         status: EventStatus.PUBLISHED,
         ticketTypes: [
           {
@@ -195,6 +198,7 @@ async function runSeed() {
         startsAt: new Date("2026-12-05T17:00:00Z"),
         endsAt: new Date("2026-12-05T21:30:00Z"),
         imageUrl: null,
+        category: EventCategory.COMEDY,
         status: EventStatus.PUBLISHED,
         ticketTypes: [
           {
@@ -231,6 +235,7 @@ async function runSeed() {
         startsAt: new Date("2026-11-28T06:00:00Z"),
         endsAt: new Date("2026-11-28T16:00:00Z"),
         imageUrl: null,
+        category: EventCategory.CONFERENCE,
         status: EventStatus.PUBLISHED,
         ticketTypes: [
           {
@@ -282,6 +287,7 @@ async function runSeed() {
           startsAt: ev.startsAt,
           endsAt: ev.endsAt,
           imageUrl: ev.imageUrl,
+          category: ev.category,
           status: ev.status,
         },
         create: {
@@ -294,6 +300,7 @@ async function runSeed() {
           startsAt: ev.startsAt,
           endsAt: ev.endsAt,
           imageUrl: ev.imageUrl,
+          category: ev.category,
           status: ev.status,
         },
       });

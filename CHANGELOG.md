@@ -114,3 +114,38 @@ ALTER TABLE "TicketType"
 - AUTH/Auth.js integration (Stage 9)
 - Payment integrations (Stage 5)
 - Ticket scanning / notifications / payouts operational flows (later stages)
+
+## Stage 3 — Public pages and event categories
+
+### Done
+
+- New migration `20261004145507_add_event_category`: `EventCategory` enum (CONCERT, PARTY, COMEDY, CONFERENCE, SPORT), `Event.category` (default CONCERT) and an index on (status, category, startsAt). The seed assigns categories to the three seeded events.
+- Event list with search and category filter, and an event page with ticket tiers, availability, sale windows, a quantity selector and a running total. The selector is client-side only: no orders, reservations or payments are created.
+- Public pages render on request so availability is always current.
+- Brand name, money and date helpers live in `src/lib/site.ts`. The `t()` helper is a pass-through placeholder; Shona and Ndebele are not wired yet.
+
+### Notes
+
+- The Stage 9 organizer form must require an explicit category. The CONCERT default exists only so existing rows migrate.
+- Verification: lint, format:check and build pass.
+
+## Stage 3b — Public landing page and shared site shell
+
+### Done
+
+- New home page for TicketZw with a landing-page hero, organiser-focused value props, and spotlighted upcoming events.
+- Shared header and footer added to the app shell so all public pages share one navigation and footer structure.
+- Event discovery moved from the root page to `/events`, while the root page now acts as the public landing page.
+- Reusable event query helpers extracted to `src/lib/events.ts` to keep route logic consistent between `/` and `/events`.
+- Placeholder organizer, terms, and privacy pages created to satisfy footer and route coverage without crossing into checkout/auth scope.
+- `CONTACT_EMAIL` added to `.env.example` for placeholder contact links.
+
+### Verification
+
+- `npm run lint` — passed after cleaning the public-page warnings.
+- `npm run build` — passed; generated routes include `/`, `/events`, `/events/[id]`, `/organizers`, `/terms`, and `/privacy`.
+
+### Launch note
+
+- Landing-page copy and hero marketing should be rechecked before public launch to confirm the tone and messaging match the final brand direction.
+- Terms and Privacy are placeholders and must be written by a lawyer before launch.

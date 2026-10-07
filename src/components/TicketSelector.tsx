@@ -1,230 +1,147 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { Currency } from "@/generated/prisma/client";
-import { formatMoney } from "@/lib/site";
+import { useState } from "react";
+import CheckoutModal from "@/components/CheckoutModal";
 
-type TicketTier = {
+export interface TicketTypeItem {
   id: string;
   name: string;
   priceAmount: number;
-  currency: Currency;
+  currency: string;
   quantityTotal: number;
-  quantitySold: number | null;
-  quantityReserved: number | null;
-  saleStartsAt: Date | null;
-  saleEndsAt: Date | null;
-  maxPerOrder: number | null;
-};
-
-type TicketSelectorProps = {
-  tickets: TicketTier[];
-};
-
-function getAvailability(ticket: TicketTier) {
-  return Math.max(
-    ticket.quantityTotal -
-      (ticket.quantitySold ?? 0) -
-      (ticket.quantityReserved ?? 0),
-    0,
-  );
+  quantitySold: number;
+  quantityReserved: number;
 }
 
-function getSaleState(ticket: TicketTier, now: Date) {
-  if (ticket.saleEndsAt && ticket.saleEndsAt < now) {
-    return "ended";
-  }
-
-  if (ticket.saleStartsAt && ticket.saleStartsAt > now) {
-    return "upcoming";
-  }
-
-  return "active";
+interface TicketSelectorProps {
+  eventId: string;
+  eventTitle: string;
+  ticketTypes: TicketTypeItem[];
 }
 
-export function TicketSelector({ tickets }: TicketSelectorProps) {
-  const now = new Date();
-  const currencies = useMemo(
-    () => [...new Set(tickets.map((ticket) => ticket.currency))],
-    [tickets],
-  );
-  const [selectedCurrency, setSelectedCurrency] = useState<Currency | null>(
-    currencies[0] ?? null,
-  );
-  const [qtyById, setQtyById] = useState<Record<string, number>>({});
-  const [notice, setNotice] = useState<string | null>(null);
+export default function TicketSelector({
+  eventId,
+  eventTitle,
+  ticketTypes,
+}: TicketSelectorProps) {
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const filteredTickets = tickets.filter(
-    (ticket) => !selectedCurrency || ticket.currency === selectedCurrency,
-  );
-
-  const currentTotal = filteredTickets.reduce((sum, ticket) => {
-    const qty = qtyById[ticket.id] ?? 0;
-    return sum + qty * ticket.priceAmount;
-  }, 0);
-
-  const handleAdjust = (ticket: TicketTier, delta: number) => {
-    const availability = getAvailability(ticket);
-    const limit = Math.min(ticket.maxPerOrder ?? availability, availability);
-    const currentValue = qtyById[ticket.id] ?? 0;
-    const nextValue = Math.max(0, Math.min(limit, currentValue + delta));
-
-    setQtyById((previous) => ({
-      ...previous,
-      [ticket.id]: nextValue,
-    }));
+  const handleQuantityChange = (
+    id: string,
+    delta: number,
+    maxAvailable: number,
+  ) => {
+    setQuantities((prev) => {
+      const current = prev[id] || 0;
+      const next = Math.max(0, Math.min(maxAvailable, current + delta));
+      return { ...prev, [id]: next };
+    });
   };
 
-  const showMultiCurrencyNotice = currencies.length > 1;
-  const totalSelected = Object.values(qtyById).reduce(
-    (sum, qty) => sum + qty,
+  const selectedItems = ticketTypes
+    .filter((tt) => (quantities[tt.id] || 0) > 0)
+    .map((tt) => ({
+      ticketTypeId: tt.id,
+      name: tt.name,
+      priceAmount: tt.priceAmount,
+      quantity: quantities[tt.id],
+    }));
+
+  const totalQuantity = selectedItems.reduce(
+    (sum, item) => sum + item.quantity,
+    0,
+  );
+  const currency = (ticketTypes[0]?.currency as "USD" | "ZIG") || "USD";
+  const totalPrice = selectedItems.reduce(
+    (sum, item) => sum + item.priceAmount * item.quantity,
     0,
   );
 
   return (
-    <div className="space-y-4">
-      {showMultiCurrencyNotice ? (
-        <p className="rounded border border-border bg-navy-tint px-3 py-2 text-sm text-navy">
-          This event sells tickets in more than one currency. Please choose one
-          currency at a time.
-        </p>
-      ) : null}
-
-      {currencies.length > 1 ? (
-        <div className="flex flex-wrap gap-2">
-          {currencies.map((currency) => (
-            <button
-              key={currency}
-              type="button"
-              onClick={() => setSelectedCurrency(currency)}
-              className={[
-                "min-h-11 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
-                selectedCurrency === currency
-                  ? "border-navy bg-navy text-white"
-                  : "border-border bg-white text-navy hover:border-navy/50",
-              ].join(" ")}
-            >
-              {currency === "USD" ? "USD" : "ZiG"}
-            </button>
-          ))}
-        </div>
-      ) : null}
+    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <h3 className="text-lg font-bold text-gray-900 mb-4">Select Tickets</h3>
 
       <div className="space-y-4">
-        {filteredTickets.map((ticket) => {
-          const availability = getAvailability(ticket);
-          const saleState = getSaleState(ticket, now);
-          const quantity = qtyById[ticket.id] ?? 0;
-          const maxPerOrder = Math.min(
-            ticket.maxPerOrder ?? availability,
-            availability,
-          );
+        {ticketTypes.map((tt) => {
+          const available =
+            tt.quantityTotal - tt.quantitySold - tt.quantityReserved;
+          const isSoldOut = available <= 0;
+          const selectedQty = quantities[tt.id] || 0;
 
           return (
             <div
-              key={ticket.id}
-              className="rounded-2xl border border-border bg-white p-4"
+              key={tt.id}
+              className="flex items-center justify-between p-4 rounded-xl border border-gray-100 bg-gray-50/50"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-base font-medium text-navy">
-                    {ticket.name}
-                  </p>
-                  <div className="mt-1 text-sm text-navy/70">
-                    <span>
-                      {formatMoney(ticket.priceAmount, ticket.currency)}
-                    </span>
-                    {ticket.maxPerOrder ? (
-                      <span className="ml-2">
-                        Max {ticket.maxPerOrder} each
-                      </span>
-                    ) : null}
-                  </div>
+              <div>
+                <div className="font-semibold text-gray-900">{tt.name}</div>
+                <div className="text-sm font-bold text-amber-600 mt-0.5">
+                  {tt.currency} {tt.priceAmount.toFixed(2)}
                 </div>
-                <div className="text-right text-sm text-navy/70">
-                  {availability === 0 ? (
-                    <span className="font-medium text-red-600">Sold out</span>
-                  ) : availability <= 10 ? (
-                    <span className="font-medium text-teal">
-                      Only {availability} left
-                    </span>
-                  ) : null}
+                <div className="text-xs text-gray-500 mt-1">
+                  {isSoldOut ? (
+                    <span className="text-red-500 font-medium">Sold Out</span>
+                  ) : (
+                    `${available} available`
+                  )}
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <div className="text-sm text-navy/70">
-                  {saleState === "upcoming" && ticket.saleStartsAt
-                    ? `On sale from ${new Intl.DateTimeFormat("en-ZA", {
-                        timeZone: "Africa/Harare",
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      }).format(ticket.saleStartsAt)}`
-                    : saleState === "ended"
-                      ? "Sales ended"
-                      : null}
-                </div>
-
-                <div className="flex items-center rounded-full border border-border bg-[#f8fafc]">
-                  <button
-                    type="button"
-                    aria-label={`Decrease ${ticket.name}`}
-                    onClick={() => handleAdjust(ticket, -1)}
-                    disabled={quantity === 0}
-                    className="min-h-11 min-w-11 rounded-l-full px-3 text-lg text-navy disabled:cursor-not-allowed disabled:text-navy/35"
-                  >
-                    −
-                  </button>
-                  <span className="min-w-12 text-center text-sm font-medium text-navy">
-                    {quantity}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Increase ${ticket.name}`}
-                    onClick={() => handleAdjust(ticket, 1)}
-                    disabled={availability === 0 || quantity >= maxPerOrder}
-                    className="min-h-11 min-w-11 rounded-r-full px-3 text-lg text-navy disabled:cursor-not-allowed disabled:text-navy/35"
-                  >
-                    +
-                  </button>
-                </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={isSoldOut || selectedQty === 0}
+                  onClick={() => handleQuantityChange(tt.id, -1, available)}
+                  className="w-8 h-8 rounded-lg border border-gray-300 flex items-center justify-center text-gray-600 font-bold hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  -
+                </button>
+                <span className="w-6 text-center font-semibold text-gray-900">
+                  {selectedQty}
+                </span>
+                <button
+                  type="button"
+                  disabled={isSoldOut || selectedQty >= available}
+                  onClick={() => handleQuantityChange(tt.id, 1, available)}
+                  className="w-8 h-8 rounded-lg border border-gray-300 flex items-center justify-center text-gray-600 font-bold hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  +
+                </button>
               </div>
             </div>
           );
         })}
       </div>
 
-      <div className="rounded-2xl border border-border bg-teal-tint p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm text-navy/70">Running total</p>
-            <p className="text-xl font-medium text-navy">
-              {formatMoney(
-                currentTotal,
-                selectedCurrency ?? tickets[0]?.currency ?? "USD",
-              )}
-            </p>
+      <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
+        <div>
+          <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">
+            Total
           </div>
-          <button
-            type="button"
-            onClick={() =>
-              setNotice(
-                "Checkout is coming soon. Nothing has been reserved or charged.",
-              )
-            }
-            disabled={totalSelected === 0}
-            className="min-h-11 rounded-full bg-navy px-5 text-sm font-medium text-white transition-colors hover:bg-navy/90 disabled:cursor-not-allowed disabled:bg-navy/30"
-          >
-            Continue
-          </button>
+          <div className="text-xl font-bold text-gray-900">
+            {currency} {totalPrice.toFixed(2)}
+          </div>
         </div>
 
-        {notice ? (
-          <p className="mt-3 rounded border border-teal/20 bg-white px-3 py-2 text-sm text-navy">
-            {notice}
-          </p>
-        ) : null}
+        <button
+          type="button"
+          disabled={totalQuantity === 0}
+          onClick={() => setIsModalOpen(true)}
+          className="rounded-xl bg-amber-500 px-6 py-3 font-semibold text-white hover:bg-amber-600 disabled:opacity-40 transition-colors shadow-md"
+        >
+          Checkout ({totalQuantity})
+        </button>
       </div>
+
+      <CheckoutModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        eventId={eventId}
+        eventTitle={eventTitle}
+        currency={currency}
+        items={selectedItems}
+      />
     </div>
   );
 }

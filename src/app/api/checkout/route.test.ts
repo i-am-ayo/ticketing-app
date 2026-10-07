@@ -8,10 +8,13 @@ describe("POST /api/checkout", () => {
   let testTicketTypeId: string;
 
   beforeAll(async () => {
-    await prisma.$queryRaw`SELECT 1`;
-  });
+    // Warm up the Neon connection pool safely
+    await prisma.$connect();
+    await prisma.organizer.findFirst().catch(() => null);
+  }, 30000);
 
   beforeEach(async () => {
+    // Sequential cleanups
     await prisma.orderItem.deleteMany();
     await prisma.order.deleteMany();
     await prisma.ticketType.deleteMany();

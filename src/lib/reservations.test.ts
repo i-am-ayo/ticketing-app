@@ -7,10 +7,13 @@ describe("Reservation Service", () => {
   let testTicketTypeId: string;
 
   beforeAll(async () => {
-    await prisma.$queryRaw`SELECT 1`;
-  });
+    // Warm up the Neon connection pool safely
+    await prisma.$connect();
+    await prisma.organizer.findFirst().catch(() => null);
+  }, 30000);
 
   beforeEach(async () => {
+    // Sequential cleanups
     await prisma.orderItem.deleteMany();
     await prisma.order.deleteMany();
     await prisma.ticketType.deleteMany();
@@ -36,9 +39,9 @@ describe("Reservation Service", () => {
       data: {
         eventId: event.id,
         name: "VIP",
-        priceAmount: 1000, // $10.00
+        priceAmount: 1000,
         currency: "USD",
-        quantityTotal: 5, // Only 5 available
+        quantityTotal: 5,
         quantitySold: 0,
         quantityReserved: 0,
       },

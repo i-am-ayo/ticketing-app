@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { createReservation } from "@/lib/reservations";
 
@@ -6,8 +6,11 @@ describe("Reservation Service", () => {
   let testEventId: string;
   let testTicketTypeId: string;
 
+  beforeAll(async () => {
+    await prisma.$queryRaw`SELECT 1`;
+  });
+
   beforeEach(async () => {
-    // Clean up test data
     await prisma.orderItem.deleteMany();
     await prisma.order.deleteMany();
     await prisma.ticketType.deleteMany();

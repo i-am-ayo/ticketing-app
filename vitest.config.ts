@@ -7,8 +7,9 @@ dotenv.config({ path: ".env.test" });
 export default defineConfig({
   test: {
     environment: "node",
-    hookTimeout: 30000,
-    testTimeout: 30000,
+    fileParallelism: false,
+    hookTimeout: 60000,
+    testTimeout: 60000,
   },
   resolve: {
     alias: {

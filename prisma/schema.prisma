@@ -115,6 +115,7 @@ model Event {
 
   organizer   Organizer    @relation(fields: [organizerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   ticketTypes TicketType[]
+  orders      Order[]
 
   @@index([status])
   @@index([status, category, startsAt])
@@ -154,6 +155,7 @@ model TicketType {
 
 model Order {
   id               String      @id @default(cuid())
+  eventId          String
   buyerName        String
   buyerPhone       String
   buyerEmail       String?
@@ -162,14 +164,20 @@ model Order {
   status           OrderStatus @default(PENDING)
   paymentProvider  String?
   paymentReference String?     @unique
+  accessToken      String      @unique
+  idempotencyKey   String?     @unique
   expiresAt        DateTime
+  paidAt           DateTime?
   createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @default(now()) @updatedAt
 
+  event         Event         @relation(fields: [eventId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   items         OrderItem[]
   tickets       Ticket[]
   paymentEvents PaymentEvent[]
 
   @@index([status])
+  @@index([eventId, status])
   @@index([expiresAt])
   @@index([buyerPhone])
   @@index([status, expiresAt])
@@ -215,7 +223,7 @@ model PaymentEvent {
   rawPayload      Json
   receivedAt      DateTime @default(now())
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   // Idempotency: the same provider event cannot be recorded twice.
   @@unique([provider, providerEventId])
